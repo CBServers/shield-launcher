@@ -16,6 +16,7 @@ static int run(int argc, char** argv) {
     QCommandLineParser parser;
     parser.setApplicationDescription(
         "Shield Launcher for Project BO4. Pass a mode flag to launch the game without opening the UI.");
+    parser.setSingleDashWordOptionMode(QCommandLineParser::ParseAsLongOptions);
     parser.addHelpOption();
 
     QCommandLineOption onlineOpt("online", "Launch the game in online mode and exit.");
