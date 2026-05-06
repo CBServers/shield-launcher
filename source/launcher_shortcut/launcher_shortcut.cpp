@@ -23,14 +23,20 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     
     STARTUPINFOA si;
     PROCESS_INFORMATION pi;
-    
+
     ZeroMemory(&si, sizeof(si));
     si.cb = sizeof(si);
     ZeroMemory(&pi, sizeof(pi));
-    
+
+    std::string cmdLine = "\"" + launcherPath.string() + "\"";
+    if (lpCmdLine && *lpCmdLine) {
+        cmdLine += " ";
+        cmdLine += lpCmdLine;
+    }
+
     if (!CreateProcessA(
         launcherPath.string().c_str(),  // Path to executable
-        NULL,                           // Command line arguments
+        cmdLine.data(),                 // Command line (forwards args from this shortcut)
         NULL,                           // Process security attributes
         NULL,                           // Thread security attributes
         FALSE,                          // Inherit handles

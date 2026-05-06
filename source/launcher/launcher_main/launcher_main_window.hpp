@@ -9,11 +9,14 @@ class MainWindow : public QMainWindow {
     Q_OBJECT
 
 public:
-    explicit MainWindow(QWidget* parent = nullptr);
+    explicit MainWindow(QWidget* parent = nullptr, bool cliMode = false);
+
+public slots:
+
+    void startGame(bool isOnline, bool isVanilla = false);
 
 private slots:
 
-    void startGame(bool isOnline, bool isVanilla = false);
     void setName();
     void setIp();
     void openDiscord();
@@ -35,6 +38,7 @@ private:
     std::wstring serverIpFile;
     bool reshadeEnabled;
 	bool closeLauncherOnPlay;
+    bool cliMode;
     int volume;
     std::wstring soundPath;
 

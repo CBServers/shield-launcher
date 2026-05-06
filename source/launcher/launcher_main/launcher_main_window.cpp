@@ -11,10 +11,12 @@
 
 namespace fs = std::filesystem;
 
-MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent),
-launcherDir(QCoreApplication::applicationDirPath().toStdWString()),  
-serverIpFile((fs::path(launcherDir) / L"servers.txt").wstring()),  
+MainWindow::MainWindow(QWidget* parent, bool cliMode) : QMainWindow(parent),
+launcherDir(QCoreApplication::applicationDirPath().toStdWString()),
+serverIpFile((fs::path(launcherDir) / L"servers.txt").wstring()),
 reshadeEnabled(false),
+closeLauncherOnPlay(false),
+cliMode(cliMode),
 volume(100),
 soundPath((fs::path(launcherDir) / L"sounds" / L"startup_sound.mp3").wstring()),
 vanillaButton(nullptr),
@@ -204,10 +206,12 @@ progressBar(nullptr)
     progressBar->setVisible(false);
     mainLayout->addWidget(progressBar);
 
-    QTimer::singleShot(500, this, [this]() {
-        updater::check_and_prompt_for_updates(this);
-        QTimer::singleShot(1000, this, &MainWindow::playStartupSound);
-        });
+    if (!cliMode) {
+        QTimer::singleShot(500, this, [this]() {
+            updater::check_and_prompt_for_updates(this);
+            QTimer::singleShot(1000, this, &MainWindow::playStartupSound);
+            });
+    }
 
     //signals
     connect(vanillaButton, &QPushButton::clicked, this, [this]() { startGame(false, true); });

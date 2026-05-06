@@ -1,0 +1,117 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - "*"
+  pull_request:
+    branches:
+      - "*"
+    types: [opened, synchronize, reopened]
+
+concurrency:
+  group: ${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build
+    runs-on: windows-2022
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration:
+          - Release
+    steps:
+      - name: Set Git to use LF line endings
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+
+      - name: Check out files
+        uses: actions/checkout@v4.2.0
+        with:
+          submodules: true
+          fetch-depth: 0
+          lfs: false
+
+      - name: Add msbuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Generate project files
+        run: ./generate.bat
+
+      - name: Set up problem matching
+        uses: ammaraskar/msvc-problem-matcher@master
+
+      - name: Build ${{matrix.configuration}}
+        run: msbuild /m /v:minimal /p:Configuration=${{matrix.configuration}} /p:Platform=x64 build/Shield_launcher.sln
+
+      - name: Package release tree
+        if: matrix.configuration == 'Release'
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File tools/package.ps1 -Configuration ${{matrix.configuration}}
+
+      - name: Upload Release Package
+        if: matrix.configuration == 'Release' && github.repository_owner == 'CBServers' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4.4.0
+        with:
+          name: Release Package
+          path: project-bo4/Latest-Release-Files/
+
+  deploy:
+    name: Deploy artifacts
+    needs: build
+    runs-on: windows-2022
+    if: github.repository_owner == 'CBServers' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    steps:
+      - name: Set Git to use LF line endings
+        run: |
+          git config --global core.autocrlf false
+          git config --global core.eol lf
+
+      - name: Download Release Package
+        uses: actions/download-artifact@v4.1.8
+        with:
+          name: Release Package
+          path: release
+
+      - name: Clone updater
+        run: |
+          git lfs install
+          git config --global user.name 'CBServers'
+          git config --global user.email '${{ secrets.OWNER_EMAIL }}'
+          $env:GIT_TERMINAL_PROMPT=0
+          $env:GIT_USERNAME="CBServers"
+          $env:GIT_PASSWORD="${{ secrets.REPO_PAT }}"
+          git clone https://$env:GIT_USERNAME:$env:GIT_PASSWORD@github.com/CBServers/updater.git
+
+      - name: Replace project-bo4 folder in updater
+        run: |
+          $artifactDir = ".\updater\project-bo4"
+          if (Test-Path $artifactDir) {
+            Remove-Item -Path $artifactDir -Recurse -Force
+          }
+          New-Item -ItemType Directory -Path $artifactDir | Out-Null
+          Copy-Item -Path .\release\* -Destination $artifactDir -Recurse -Force
+
+      - name: Download hashing executable
+        run: |
+          Invoke-WebRequest -Uri "https://github.com/CBServers/updater/releases/latest/download/update-hasher.exe" -OutFile "update-hasher.exe"
+
+      - name: Generate hashed.json
+        run: |
+          $artifactDir = ".\updater\project-bo4"
+          Move-Item -Path .\update-hasher.exe -Destination "$artifactDir\update-hasher.exe"
+          Set-Location $artifactDir
+          .\update-hasher.exe
+          Set-Location $env:GITHUB_WORKSPACE
+          Move-Item -Path "$artifactDir\hashed.json" -Destination ".\updater\project-bo4.json" -Force
+          Remove-Item -Path "$artifactDir\update-hasher.exe" -Force
+
+      - name: Push changes to updater
+        run: |
+          cd updater
+          git add .
+          git lfs status
+          git commit -m "Update artifacts"
+          git push origin main
