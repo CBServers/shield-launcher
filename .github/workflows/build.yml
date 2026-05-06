@@ -87,7 +87,7 @@ jobs:
 
       - name: Replace project-bo4 folder in updater
         run: |
-          $artifactDir = ".\updater\project-bo4"
+          $artifactDir = ".\updater\updater\project-bo4"
           if (Test-Path $artifactDir) {
             Remove-Item -Path $artifactDir -Recurse -Force
           }
@@ -100,12 +100,12 @@ jobs:
 
       - name: Generate hashed.json
         run: |
-          $artifactDir = ".\updater\project-bo4"
+          $artifactDir = ".\updater\updater\project-bo4"
           Move-Item -Path .\update-hasher.exe -Destination "$artifactDir\update-hasher.exe"
           Set-Location $artifactDir
           .\update-hasher.exe
           Set-Location $env:GITHUB_WORKSPACE
-          Move-Item -Path "$artifactDir\hashed.json" -Destination ".\updater\project-bo4.json" -Force
+          Move-Item -Path "$artifactDir\hashed.json" -Destination ".\updater\updater\project-bo4.json" -Force
           Remove-Item -Path "$artifactDir\update-hasher.exe" -Force
 
       - name: Push changes to updater
