@@ -123,44 +123,13 @@ namespace DllLoading {
         fs::path launcherDir = gamePath / "project-bo4" / "launcher";
         std::cout << "Launcher directory: " << launcherDir.string() << std::endl;
         
-        fs::path zipPath = launcherDir / (isOnline ? "mp.zip" : "solo.zip");
-        std::cout << "Looking for zip at: " << zipPath.string() << std::endl;
-        std::cout << "File exists: " << (fs::exists(zipPath) ? "Yes" : "No") << std::endl;
-        
-        if (!fs::exists(zipPath)) {
+        fs::path srcDll = launcherDir / (isOnline ? "mp" : "solo") / "XInput9_1_0.dll";
+        std::cout << "Looking for source DLL at: " << srcDll.string() << std::endl;
+
+        if (!fs::exists(srcDll)) {
+            std::cout << "Source DLL not found" << std::endl;
             return Result::FileNotFound;
         }
-
-
-        // Note: not needed anymore cause of ATE47's plugin now loading zone from project-bo4/zone
-
-        /*
-        // zone shit
-        std::cout << "Copying zone folders..." << std::endl;
-
-        // --- Copy project-bo4/zone to <gameDir>/zone ---
-        try {
-            fs::path sourceZone = gamePath / "project-bo4" / "zone";
-            fs::path targetZone = gamePath / "zone";
-
-            if(fs::exists(sourceZone)) {
-                std::cout << "Copying zone files from: " << sourceZone.string() << " to: " << targetZone.string() << std::endl;
-                fs::create_directories(targetZone); // target exists?
-
-                for(const auto& entry : fs::directory_iterator(sourceZone)) {
-                    fs::path dest = targetZone / entry.path().filename();
-                    std::cout << "Copying: " << entry.path().string() << " -> " << dest.string() << std::endl;
-                    fs::copy(entry.path(), dest, fs::copy_options::overwrite_existing);
-                }
-            }
-            else {
-                std::cout << "Source zone directory does not exist: " << sourceZone.string() << std::endl;
-            }
-        }
-        catch(const std::exception& e) {
-            std::cout << "Failed to copy zone files: " << e.what() << std::endl;
-        }
-        */
 
         // delete the old support file, to avoid some getting ui errors cause of two zone files
         fs::path supportFF = gamePath / "zone" / "support.ff";
@@ -176,41 +145,19 @@ namespace DllLoading {
             std::cout << "Failed to delete support.ff: " << e.what() << std::endl;
         }
 
-        fs::path dllPath = gamePath / "XInput9_1_0.dll";
-        if (fs::exists(dllPath)) {
-            std::cout << "DLL already exists, will still extraction" << std::endl;
-            //return Result::Success;
-        }
-
+        fs::path dstDll = gamePath / "XInput9_1_0.dll";
         try {
-            std::string extractCmd = "powershell -Command \"";
-            extractCmd += "Expand-Archive -Path '" + zipPath.string() + "' -DestinationPath '" + gamePath.string() + "' -Force";
-            extractCmd += "\"";
-            
-            std::cout << "Executing extraction command: " << extractCmd << std::endl;
-            
-            int result = system(extractCmd.c_str());
-            if (result != 0) {
-                std::cout << "Extraction failed with code: " << result << std::endl;
-                return Result::ZipError;
-            }
-            
-            fs::path extractedDll = gamePath / "XInput9_1_0.dll";
-            if (!fs::exists(extractedDll)) {
-                std::cout << "DLL was not extracted successfully" << std::endl;
-                return Result::FileNotFound;
-            }
-            
-            std::cout << "Extraction successful" << std::endl;
+            fs::copy_file(srcDll, dstDll, fs::copy_options::overwrite_existing);
+            std::cout << "Copied DLL to: " << dstDll.string() << std::endl;
             return Result::Success;
         }
         catch (const std::exception& e) {
-            std::cout << "Exception: " << e.what() << std::endl;
-            return Result::ZipError;
+            std::cout << "Copy failed: " << e.what() << std::endl;
+            return Result::CopyError;
         }
         catch (...) {
-            std::cout << "Unknown exception" << std::endl;
-            return Result::ZipError;
+            std::cout << "Unknown exception during copy" << std::endl;
+            return Result::CopyError;
         }
     }
 

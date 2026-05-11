@@ -276,13 +276,13 @@ void MainWindow::startGame(bool isOnline, bool isVanilla) {
             switch(result) {
             case DllLoading::Result::FileNotFound:
                 errorMsg = QString("Required files not found! Make sure %1 exists in the launcher directory.")
-                    .arg(isOnline ? "mp.zip" : "solo.zip");
+                    .arg(isOnline ? "mp/XInput9_1_0.dll" : "solo/XInput9_1_0.dll");
                 break;
             case DllLoading::Result::InvalidGamePath:
                 errorMsg = "BlackOps4.exe not found! Make sure the launcher shortcut is in the game directory.";
                 break;
-            case DllLoading::Result::ZipError:
-                errorMsg = "Failed to extract files!";
+            case DllLoading::Result::CopyError:
+                errorMsg = "Failed to copy the mod DLL into the game directory.";
                 break;
             default:
                 errorMsg = "Unknown error occurred while extracting files.";

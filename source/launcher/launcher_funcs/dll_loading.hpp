@@ -7,7 +7,7 @@ namespace DllLoading {
         Success,
         FileNotFound,
         InvalidGamePath,
-        ZipError
+        CopyError
     };
 
     bool isGameRunning();

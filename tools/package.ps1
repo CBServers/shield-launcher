@@ -60,6 +60,20 @@ Write-Host "  copied platforms/"
 # Top-level shortcut
 Copy-Required -Name 'Launch Project BO4.exe' -DstDir $dstRoot
 
+# Migrate legacy mp.zip/solo.zip into mp/ and solo/ folders so the launcher can copy the DLL directly
+foreach ($mode in 'mp','solo') {
+    $zip    = Join-Path $dstLauncher "$mode.zip"
+    $target = Join-Path $dstLauncher $mode
+    if (Test-Path -LiteralPath $zip) {
+        if (-not (Test-Path -LiteralPath $target)) {
+            New-Item -ItemType Directory -Path $target | Out-Null
+        }
+        Expand-Archive -LiteralPath $zip -DestinationPath $target -Force
+        Remove-Item -LiteralPath $zip -Force
+        Write-Host "  migrated $mode.zip -> $mode/"
+    }
+}
+
 # Strip any stale update zips at the release root so the artifact is clean
 $staleZips = Get-ChildItem -LiteralPath $dstRoot -Filter '*.zip' -File -ErrorAction SilentlyContinue
 foreach ($z in $staleZips) {
