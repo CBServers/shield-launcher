@@ -12,6 +12,8 @@
 #include <QtWidgets/QWidget>
 #include <filesystem>
 
+#define AUTO_UPDATER_DISABLED 1
+
 namespace updater {
     const std::string SERVER_VERSION = "1.0.6";
 
@@ -189,6 +191,9 @@ namespace updater {
     }
 
     bool check_and_prompt_for_updates(QWidget* parent) {
+#if AUTO_UPDATER_DISABLED
+        return false;
+#endif
         if (check_for_updates()) {
             std::string latestVersion = utils::configuration::ReadString("UpdateInfo", "LatestVersion", "release");
             std::string assetName = utils::configuration::ReadString("UpdateInfo", "AssetName", "");
