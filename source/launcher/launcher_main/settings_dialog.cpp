@@ -14,12 +14,13 @@ public:
     QWidget* createEditor(QWidget* parent, const QStyleOptionViewItem& option, const QModelIndex& index) const override {
         if (index.column() != 1) return nullptr;
 
+        /*
         QString type = index.data(Qt::UserRole).toString();
         
         if (type == "bool") {
             QComboBox* comboBox = new QComboBox(parent);
-            comboBox->addItem("Disable", false);
-            comboBox->addItem("Enable", true);
+            comboBox->addItem("false", false);
+            comboBox->addItem("true", true);
             comboBox->setStyleSheet("QComboBox { background-color: #151515; color: white; border: 1px solid #333333; padding: 5px; }");
             return comboBox;
         } else if (type == "int") {
@@ -27,11 +28,16 @@ public:
             spinBox->setRange(-99999, 99999);
             spinBox->setStyleSheet("QSpinBox { background-color: #151515; color: white; border: 1px solid #333333; padding: 5px; selection-background-color: #1a3c5e; }");
             return spinBox;
+        } else if (type == "int64") {
+            QLineEdit* lineEdit = new QLineEdit(parent);
+            lineEdit->setStyleSheet("QLineEdit { background-color: #151515; color: white; border: 1px solid #333333; padding: 5px; selection-background-color: #1a3c5e; }");
+            return lineEdit;
         } else if (type == "string") {
             QLineEdit* lineEdit = new QLineEdit(parent);
             lineEdit->setStyleSheet("QLineEdit { background-color: #151515; color: white; border: 1px solid #333333; padding: 5px; selection-background-color: #1a3c5e; }");
             return lineEdit;
         }
+        */
         
         return nullptr;
     }
@@ -51,6 +57,12 @@ public:
             if (spinBox) {
                 spinBox->setValue(value);
             }
+        } else if (type == "int64") {
+            qint64 value = index.data(Qt::UserRole + 1).toLongLong();
+            QLineEdit* lineEdit = dynamic_cast<QLineEdit*>(editor);
+            if (lineEdit) {
+                lineEdit->setText(QString::number(value));
+            }
         } else if (type == "string") {
             QString value = index.data(Qt::UserRole + 1).toString();
             QLineEdit* lineEdit = dynamic_cast<QLineEdit*>(editor);
@@ -69,13 +81,20 @@ public:
             QComboBox* comboBox = dynamic_cast<QComboBox*>(editor);
             if (comboBox) {
                 bool value = comboBox->currentData().toBool();
-                model->setData(index, value ? "Enable" : "Disable", Qt::DisplayRole);
+                model->setData(index, value ? "true" : "false", Qt::DisplayRole);
                 model->setData(index, value, Qt::UserRole + 1);
             }
         } else if (type == "int") {
             QSpinBox* spinBox = dynamic_cast<QSpinBox*>(editor);
             if (spinBox) {
                 int value = spinBox->value();
+                model->setData(index, QString::number(value), Qt::DisplayRole);
+                model->setData(index, value, Qt::UserRole + 1);
+            }
+        } else if (type == "int64") {
+            QLineEdit* lineEdit = dynamic_cast<QLineEdit*>(editor);
+            if (lineEdit) {
+                qint64 value = lineEdit->text().toLongLong();
                 model->setData(index, QString::number(value), Qt::DisplayRole);
                 model->setData(index, value, Qt::UserRole + 1);
             }
@@ -98,10 +117,10 @@ public:
             if (type == "bool" && event->type() == QEvent::MouseButtonRelease) {
                 bool currentValue = index.data(Qt::UserRole + 1).toBool();
                 bool newValue = !currentValue;
-                model->setData(index, newValue ? "Enable" : "Disable", Qt::DisplayRole);
+                model->setData(index, newValue ? "true" : "false", Qt::DisplayRole);
                 model->setData(index, newValue, Qt::UserRole + 1);
                 return true;
-            } else if (type == "string" && event->type() == QEvent::MouseButtonDblClick) {
+            } else if ((type == "string" || type == "int" || type == "int64") && event->type() == QEvent::MouseButtonDblClick) {
                 QTreeWidget* treeWidget = qobject_cast<QTreeWidget*>(const_cast<QWidget*>(option.widget));
                 if (treeWidget) {
                     QMouseEvent* mouseEvent = dynamic_cast<QMouseEvent*>(event);
@@ -368,7 +387,7 @@ void SettingsDialog::populateTreeWidget(const rapidjson::Value& jsonObj, QTreeWi
         } else if (it->value.IsBool()) {
             bool value = it->value.GetBool();
             
-            item->setText(1, value ? "Enable" : "Disable");
+            item->setText(1, value ? "true" : "false");
             item->setData(1, Qt::UserRole, "bool");
             item->setData(1, Qt::UserRole + 1, value);        
             item->setFlags(item->flags() | Qt::ItemIsEditable);
@@ -378,6 +397,13 @@ void SettingsDialog::populateTreeWidget(const rapidjson::Value& jsonObj, QTreeWi
             } else {
                 item->setBackground(1, QColor(40, 40, 40, 128));
             }
+        } else if (it->value.IsInt64()) {
+            qint64 value = it->value.GetInt64();
+            item->setText(1, QString::number(value));
+            item->setData(1, Qt::UserRole, "int64");
+            item->setData(1, Qt::UserRole + 1, value);
+            
+            item->setFlags(item->flags() | Qt::ItemIsEditable);
         } else if (it->value.IsInt()) {
             int value = it->value.GetInt();
             item->setText(1, QString::number(value));
@@ -435,7 +461,9 @@ void SettingsDialog::saveSettings() {
                 jsonValue.SetBool(item->data(1, Qt::UserRole + 1).toBool());
             } else if (type == "int") {
                 jsonValue.SetInt(item->text(1).toInt());
-            } else if (type == "double") {
+            } else if (type == "int64") {
+                jsonValue.SetInt64(item->text(1).toLongLong());
+            } else if(type == "double") {
                 jsonValue.SetDouble(item->text(1).toDouble());
             } else if (type == "string") {
                 std::string str = item->text(1).toStdString();
@@ -459,7 +487,7 @@ void SettingsDialog::saveSettings() {
     doc.Accept(writer);
     fclose(fp);
     
-    showMessageBox(QMessageBox::Information, "Success", "Settings saved successfully");
+    //showMessageBox(QMessageBox::Information, "Success", "Settings saved successfully");
     accept();
 }
 
@@ -481,7 +509,9 @@ void SettingsDialog::saveJsonFromTreeWidget(rapidjson::Document& doc, rapidjson:
                 jsonValue.SetBool(childItem->data(1, Qt::UserRole + 1).toBool());
             } else if (type == "int") {
                 jsonValue.SetInt(childItem->text(1).toInt());
-            } else if (type == "double") {
+            } else if (type == "int64") {
+                jsonValue.SetInt64(childItem->text(1).toLongLong());
+            } else if(type == "double") {
                 jsonValue.SetDouble(childItem->text(1).toDouble());
             } else if (type == "string") {
                 std::string str = childItem->text(1).toStdString();
