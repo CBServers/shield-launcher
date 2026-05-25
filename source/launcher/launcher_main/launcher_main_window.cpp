@@ -714,12 +714,26 @@ bool MainWindow::copyLPCFolder() {
     std::string currentDir = QCoreApplication::applicationDirPath().toStdString();
     fs::path currentPath = fs::path(currentDir);
     fs::path sourceLPCPath = currentPath / "LPC";
-    fs::path gameDir = currentPath.parent_path().parent_path();
-    fs::path destLPCPath = gameDir / "LPC";
 
     if (!fs::exists(sourceLPCPath)) {
         return false;
     }
 
+    fs::path gameDir;
+    if (fs::exists(currentPath / "BlackOps4.exe")) {
+        gameDir = currentPath;
+    }
+    else if (fs::exists(currentPath.parent_path().parent_path() / "BlackOps4.exe")) {
+        gameDir = currentPath.parent_path().parent_path();
+    }
+    else {
+        return false;
+    }
+
+    if (gameDir.lexically_normal() == currentPath.lexically_normal()) {
+        return true;
+    }
+
+    fs::path destLPCPath = gameDir / "LPC";
     return utils::copyDirectoryRecursive(sourceLPCPath.string(), destLPCPath.string());
 }
