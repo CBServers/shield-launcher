@@ -12,7 +12,7 @@ namespace DllLoading {
 
     bool isGameRunning();
 
-    Result extractDlls(const std::string& gameDir, bool isOnline, bool reshadeEnabled);
+    Result extractDlls(const std::filesystem::path& gameDir, bool isOnline, bool reshadeEnabled);
 
-    bool launchGame(const std::string& gameExePath, bool isOnline);
+    bool launchGame(const std::filesystem::path& gameExePath, bool isOnline);
 }

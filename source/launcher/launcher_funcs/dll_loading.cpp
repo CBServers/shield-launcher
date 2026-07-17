@@ -14,10 +14,10 @@ namespace fs = std::filesystem;
 namespace DllLoading {
     std::thread cleanupThread;
     std::atomic<bool> cleanupThreadRunning(false);
-    std::string gameDirectoryForCleanup;  
-    DWORD gameProcessId = 0;  
+    fs::path gameDirectoryForCleanup;
+    DWORD gameProcessId = 0;
 
-    void monitorGameAndCleanup(const std::string& gamePath, DWORD processId) {
+    void monitorGameAndCleanup(const fs::path& gamePath, DWORD processId) {
         cleanupThreadRunning = true;
         std::cout << "Starting cleanup monitor thread for process ID: " << processId << std::endl;
         
@@ -41,8 +41,7 @@ namespace DllLoading {
         
         std::this_thread::sleep_for(std::chrono::seconds(1));
         
-        fs::path gameDir = fs::path(gamePath);
-        fs::path dllPath = gameDir / "XInput9_1_0.dll";
+        fs::path dllPath = gamePath / "XInput9_1_0.dll";
         
         try {
             if (fs::exists(dllPath)) {
@@ -93,12 +92,12 @@ namespace DllLoading {
         return found;
     }
 
-    Result extractDlls(const std::string& gameDir, bool isOnline, bool reshadeEnabled) {
+    Result extractDlls(const fs::path& gameDir, bool isOnline, bool reshadeEnabled) {
         if (gameDir.empty()) {
             return Result::InvalidGamePath;
         }
 
-        fs::path gamePath = fs::path(gameDir);
+        fs::path gamePath = gameDir;
         fs::path gameExePath = gamePath / "BlackOps4.exe";
         
         std::cout << "Initial game path: " << gamePath.string() << std::endl;
@@ -164,7 +163,7 @@ namespace DllLoading {
     void cleanupDllsAfterGame() {
         cleanupThreadRunning = true;
         std::cout << "Starting DLL cleanup monitor thread..." << std::endl;
-        std::cout << "Will clean up DLLs in directory: " << gameDirectoryForCleanup << std::endl;
+        std::cout << "Will clean up DLLs in directory: " << gameDirectoryForCleanup.string() << std::endl;
         
         while (isGameRunning()) {
             std::this_thread::sleep_for(std::chrono::seconds(2));
@@ -180,7 +179,7 @@ namespace DllLoading {
             return;
         }
         
-        fs::path dllPath = fs::path(gameDirectoryForCleanup) / "XInput9_1_0.dll";
+        fs::path dllPath = gameDirectoryForCleanup / "XInput9_1_0.dll";
         
         std::cout << "Attempting to delete DLL at: " << dllPath.string() << std::endl;
         
@@ -212,29 +211,30 @@ namespace DllLoading {
         cleanupThreadRunning = false;
     }
 
-    bool launchGame(const std::string& gameExePath, bool isOnline) {
-        std::cout << "Launching game: " << gameExePath << (isOnline ? " -multiplayer" : " -zombies") << std::endl;
-        
-        fs::path gameDir = fs::path(gameExePath).parent_path();
-        std::string gameDirStr = gameDir.string();
-        
-        gameDirectoryForCleanup = gameDirStr;
-        
-        std::string gameFlags = isOnline ? " -multiplayer" : " -zombies";
-        
-        SHELLEXECUTEINFOA shExInfo = {0};
-        shExInfo.cbSize = sizeof(SHELLEXECUTEINFOA);
+    bool launchGame(const fs::path& gameExePath, bool isOnline) {
+        std::cout << "Launching game: " << gameExePath.string() << (isOnline ? " -multiplayer" : " -zombies") << std::endl;
+
+        fs::path gameDir = gameExePath.parent_path();
+
+        gameDirectoryForCleanup = gameDir;
+
+        std::wstring exeStr = gameExePath.wstring();
+        std::wstring dirStr = gameDir.wstring();
+        std::wstring gameFlags = isOnline ? L" -multiplayer" : L" -zombies";
+
+        SHELLEXECUTEINFOW shExInfo = {0};
+        shExInfo.cbSize = sizeof(SHELLEXECUTEINFOW);
         shExInfo.fMask = SEE_MASK_NOCLOSEPROCESS;
         shExInfo.hwnd = NULL;
-        shExInfo.lpVerb = "open";
-        shExInfo.lpFile = gameExePath.c_str();
+        shExInfo.lpVerb = L"open";
+        shExInfo.lpFile = exeStr.c_str();
         shExInfo.lpParameters = gameFlags.c_str();
-        shExInfo.lpDirectory = gameDirStr.c_str();  
+        shExInfo.lpDirectory = dirStr.c_str();
         shExInfo.nShow = SW_SHOW;
-        
-        std::cout << "Launching from directory: " << gameDirStr << std::endl;
-        
-        if (!ShellExecuteExA(&shExInfo)) {
+
+        std::cout << "Launching from directory: " << gameDir.string() << std::endl;
+
+        if (!ShellExecuteExW(&shExInfo)) {
             DWORD error = GetLastError();
             std::cout << "ShellExecuteEx failed with error: " << error << std::endl;
             return false;

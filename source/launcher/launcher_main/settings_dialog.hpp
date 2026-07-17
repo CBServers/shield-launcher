@@ -1,6 +1,7 @@
 #pragma once
 #include "std_include.hpp"
 #include <string>
+#include <filesystem>
 #include <rapidjson/document.h>
 
 class SettingsDialog : public QDialog {
@@ -10,7 +11,7 @@ public:
     explicit SettingsDialog(QWidget* parent = nullptr);
     ~SettingsDialog();
     
-    void setJsonPath(const std::string& path);
+    void setJsonPath(const std::filesystem::path& path);
 
 private slots:
     void saveSettings();
@@ -30,5 +31,5 @@ private:
     QPushButton* resetButton;
     QPushButton* cancelButton;
     
-    std::string jsonPath;
+    std::filesystem::path jsonPath;
 };

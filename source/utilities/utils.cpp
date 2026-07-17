@@ -9,7 +9,7 @@
 #endif
 
 namespace utils {
-    bool createDirectoryIfNotExists(const std::string& path) {
+    bool createDirectoryIfNotExists(const std::filesystem::path& path) {
         try {
             return std::filesystem::create_directories(path);
         } catch (...) {
@@ -17,7 +17,7 @@ namespace utils {
         }
     }
 
-    bool removeDirectoryRecursive(const std::string& path) {
+    bool removeDirectoryRecursive(const std::filesystem::path& path) {
         try {
             return std::filesystem::remove_all(path) > 0;
         } catch (...) {
@@ -25,14 +25,14 @@ namespace utils {
         }
     }
 
-    std::vector<std::string> findFiles(const std::string& directory, const std::string& pattern) {
-        std::vector<std::string> files;
+    std::vector<std::filesystem::path> findFiles(const std::filesystem::path& directory, const std::string& pattern) {
+        std::vector<std::filesystem::path> files;
         try {
             for (const auto& entry : std::filesystem::recursive_directory_iterator(directory)) {
                 if (entry.is_regular_file()) {
                     std::string filename = entry.path().filename().string();
                     if (pattern.empty() || filename.find(pattern) != std::string::npos) {
-                        files.push_back(entry.path().string());
+                        files.push_back(entry.path());
                     }
                 }
             }
@@ -126,22 +126,22 @@ namespace utils {
 #endif
     }
 
-    bool copyDirectoryRecursive(const std::string& sourceDir, const std::string& destDir, bool overwrite) {
+    bool copyDirectoryRecursive(const std::filesystem::path& sourceDir, const std::filesystem::path& destDir, bool overwrite) {
         namespace fs = std::filesystem;
-        
+
         try {
             if (!fs::exists(destDir)) {
                 if (!fs::create_directories(destDir)) {
                     return false;
                 }
             }
-            
+
             for (const auto& entry : fs::directory_iterator(sourceDir)) {
                 const fs::path sourcePath = entry.path();
-                const fs::path destPath = fs::path(destDir) / sourcePath.filename();
-                
+                const fs::path destPath = destDir / sourcePath.filename();
+
                 if (fs::is_directory(sourcePath)) {
-                    if (!copyDirectoryRecursive(sourcePath.string(), destPath.string(), overwrite)) {
+                    if (!copyDirectoryRecursive(sourcePath, destPath, overwrite)) {
                         return false;
                     }
                 } else if (fs::is_regular_file(sourcePath)) {

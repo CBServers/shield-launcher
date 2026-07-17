@@ -7,7 +7,7 @@ namespace fs = std::filesystem;
 namespace cli {
 
     static fs::path resolveGameDir() {
-        fs::path exeDir = fs::path(QCoreApplication::applicationDirPath().toStdString());
+        fs::path exeDir = QCoreApplication::applicationDirPath().toStdWString();
         if (fs::exists(exeDir / "BlackOps4.exe")) {
             return exeDir;
         }
@@ -33,7 +33,7 @@ namespace cli {
             return false;
         }
 
-        std::string jsonPath = (gameDir / "project-bo4.json").string();
+        fs::path jsonPath = gameDir / "project-bo4.json";
         if (!JsonUtils::replaceJsonValue(jsonPath, value, section, key)) {
             QMessageBox::critical(nullptr, "Error",
                 QString("Failed to write %1 to project-bo4.json.")

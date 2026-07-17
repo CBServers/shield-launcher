@@ -63,7 +63,7 @@ progressBar(nullptr)
                 SendMessage((HWND)winId(), WM_SETICON, ICON_BIG, (LPARAM)fileIcon);
             }
 
-            QIcon icon(QString::fromStdString(iconPath.string()));
+            QIcon icon(QString::fromStdWString(iconPath.wstring()));
             if (!icon.isNull()) {
                 setWindowIcon(icon);
                 QApplication::setWindowIcon(icon);
@@ -82,7 +82,7 @@ progressBar(nullptr)
     //background image relative to exe location
     fs::path imagePath = fs::path(launcherDir) / "images" / "launcher.png";
     if (fs::exists(imagePath)) {
-        QPixmap background(QString::fromStdString(imagePath.string()));
+        QPixmap background(QString::fromStdWString(imagePath.wstring()));
         if (!background.isNull()) {
             background = background.scaled(800, 600, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation);
             backgroundLabel->setPixmap(background);
@@ -266,11 +266,11 @@ void MainWindow::startGame(bool isOnline, bool isVanilla) {
 
     progressBar->setValue(25);
 
-    std::string currentDir = QCoreApplication::applicationDirPath().toStdString();
+    fs::path currentPath = QCoreApplication::applicationDirPath().toStdWString();
 
     if (!isVanilla)
     {
-        auto result = DllLoading::extractDlls(currentDir, isOnline, reshadeEnabled);
+        auto result = DllLoading::extractDlls(currentPath, isOnline, reshadeEnabled);
         if(result != DllLoading::Result::Success) {
             QString errorMsg;
             switch(result) {
@@ -307,13 +307,12 @@ void MainWindow::startGame(bool isOnline, bool isVanilla) {
         game_exe = "Black Ops 4 Launcher.exe";
 
 		// delete our dll if it exist.
-        fs::path xinputPath = fs::path(currentDir) / "XInput9_1_0.dll";
+        fs::path xinputPath = currentPath / "XInput9_1_0.dll";
         if (fs::exists(xinputPath)) {
             fs::remove(xinputPath);
 		}
     }
 
-    fs::path currentPath = fs::path(currentDir);
     fs::path gameExePath;
 
     if (fs::exists(currentPath / game_exe)) {
@@ -332,7 +331,7 @@ void MainWindow::startGame(bool isOnline, bool isVanilla) {
         return;
     }
 
-    if (!DllLoading::launchGame(gameExePath.string(), isOnline)) {
+    if (!DllLoading::launchGame(gameExePath, isOnline)) {
         showMessageBox(QMessageBox::Critical, "Error", "Failed to start the game!");
         progressBar->setVisible(false);
 
@@ -366,8 +365,7 @@ void MainWindow::setName() {
 
     QVBoxLayout layout(&dialog);
 
-    std::string currentDir = QCoreApplication::applicationDirPath().toStdString();
-    fs::path gamePath = fs::path(currentDir);
+    fs::path gamePath = QCoreApplication::applicationDirPath().toStdWString();
     fs::path gameExePath = gamePath / "BlackOps4.exe";
 
     if (!fs::exists(gameExePath)) {
@@ -380,7 +378,7 @@ void MainWindow::setName() {
         }
     }
 
-    std::string jsonPath = (gamePath / "project-bo4.json").string();
+    fs::path jsonPath = gamePath / "project-bo4.json";
     std::string currentName = JsonUtils::getJsonItem(jsonPath, "identity", "name");
 
     QLabel label("Enter your name:");
@@ -425,8 +423,7 @@ void MainWindow::setIp() {
 
     QVBoxLayout layout(&dialog);
 
-    std::string currentDir = QCoreApplication::applicationDirPath().toStdString();
-    fs::path gamePath = fs::path(currentDir);
+    fs::path gamePath = QCoreApplication::applicationDirPath().toStdWString();
     fs::path gameExePath = gamePath / "BlackOps4.exe";
 
     if (!fs::exists(gameExePath)) {
@@ -438,7 +435,7 @@ void MainWindow::setIp() {
         }
     }
 
-    std::string jsonPath = (gamePath / "project-bo4.json").string();
+    fs::path jsonPath = gamePath / "project-bo4.json";
     std::string currentIp = JsonUtils::getJsonItem(jsonPath, "demonware", "ipv4");
 
     QLabel label("Enter server IP address:");
@@ -497,7 +494,7 @@ void MainWindow::updateVolume(int value) {
 void MainWindow::openSettings() {
 
     fs::path gameDir = fs::path(launcherDir).parent_path().parent_path();
-    std::string jsonPath = (gameDir / "project-bo4.json").string();
+    fs::path jsonPath = gameDir / "project-bo4.json";
 
     SettingsDialog settingsDialog(this);
     settingsDialog.setJsonPath(jsonPath);
@@ -556,7 +553,7 @@ void MainWindow::showMessageBox(QMessageBox::Icon icon, const QString& title, co
 void MainWindow::saveCloseLauncheronPlay() {
     try {
 
-        std::string jsonPath = (fs::path(launcherDir) / "launcher-config.json").string();
+        fs::path jsonPath = fs::path(launcherDir) / "launcher-config.json";
 
         rapidjson::Document document;
         if(fs::exists(jsonPath)) {
@@ -602,7 +599,7 @@ void MainWindow::saveCloseLauncheronPlay() {
 
 void MainWindow::loadCloseLauncheronPlay() {
     try {
-        std::string jsonPath = (fs::path(launcherDir) / "launcher-config.json").string();
+        fs::path jsonPath = fs::path(launcherDir) / "launcher-config.json";
 
         if(fs::exists(jsonPath)) {
             std::ifstream file(jsonPath);
@@ -632,7 +629,7 @@ void MainWindow::loadCloseLauncheronPlay() {
 void MainWindow::saveVolumeSettings() {
     try {
 
-        std::string jsonPath = (fs::path(launcherDir) / "launcher-config.json").string();
+        fs::path jsonPath = fs::path(launcherDir) / "launcher-config.json";
 
         rapidjson::Document document;
         if (fs::exists(jsonPath)) {
@@ -678,7 +675,7 @@ void MainWindow::saveVolumeSettings() {
 
 void MainWindow::loadVolumeSettings() {
     try {
-        std::string jsonPath = (fs::path(launcherDir) / "launcher-config.json").string();
+        fs::path jsonPath = fs::path(launcherDir) / "launcher-config.json";
 
         if (fs::exists(jsonPath)) {
             std::ifstream file(jsonPath);
@@ -711,8 +708,7 @@ void MainWindow::loadVolumeSettings() {
 
 bool MainWindow::copyLPCFolder() {
 
-    std::string currentDir = QCoreApplication::applicationDirPath().toStdString();
-    fs::path currentPath = fs::path(currentDir);
+    fs::path currentPath = QCoreApplication::applicationDirPath().toStdWString();
     fs::path sourceLPCPath = currentPath / "LPC";
 
     if (!fs::exists(sourceLPCPath)) {
@@ -735,5 +731,5 @@ bool MainWindow::copyLPCFolder() {
     }
 
     fs::path destLPCPath = gameDir / "LPC";
-    return utils::copyDirectoryRecursive(sourceLPCPath.string(), destLPCPath.string());
+    return utils::copyDirectoryRecursive(sourceLPCPath, destLPCPath);
 }

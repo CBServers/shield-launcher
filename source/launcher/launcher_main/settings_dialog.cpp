@@ -199,7 +199,7 @@ void SettingsDialog::showContextMenu(const QPoint& pos) {
     }
 }
 
-void SettingsDialog::setJsonPath(const std::string& path) {
+void SettingsDialog::setJsonPath(const fs::path& path) {
     jsonPath = path;
     loadSettings();
 }
@@ -333,7 +333,7 @@ void SettingsDialog::loadSettings() {
     }
     
     FILE* fp = nullptr;
-    fopen_s(&fp, jsonPath.c_str(), "rb");
+    _wfopen_s(&fp, jsonPath.c_str(), L"rb");
     if (!fp) {
         showMessageBox(QMessageBox::Critical, "Error", "Failed to open settings file");
         return;
@@ -475,7 +475,7 @@ void SettingsDialog::saveSettings() {
     }
     
     FILE* fp = nullptr;
-    fopen_s(&fp, jsonPath.c_str(), "wb");
+    _wfopen_s(&fp, jsonPath.c_str(), L"wb");
     if (!fp) {
         showMessageBox(QMessageBox::Critical, "Error", "Failed to save settings file");
         return;
