@@ -88,10 +88,15 @@ jobs:
       - name: Replace project-bo4 folder in updater
         run: |
           $artifactDir = ".\updater\updater\project-bo4"
+          # Large files stored only in the updater repo (LFS) - never shipped in the artifact
+          $keep = @('BlackOps4.exe')
           if (Test-Path $artifactDir) {
-            Remove-Item -Path $artifactDir -Recurse -Force
+            Get-ChildItem -LiteralPath $artifactDir -Force |
+              Where-Object { $keep -notcontains $_.Name } |
+              ForEach-Object { Remove-Item -LiteralPath $_.FullName -Recurse -Force }
+          } else {
+            New-Item -ItemType Directory -Path $artifactDir | Out-Null
           }
-          New-Item -ItemType Directory -Path $artifactDir | Out-Null
           Copy-Item -Path .\release\* -Destination $artifactDir -Recurse -Force
 
       - name: Download hashing executable
