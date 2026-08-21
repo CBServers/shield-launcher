@@ -331,6 +331,12 @@ void MainWindow::startGame(bool isOnline, bool isVanilla) {
         return;
     }
 
+    // the client falls back to 127.0.0.1 when this file is missing
+    fs::path jsonPath = gameExePath.parent_path() / "project-bo4.json";
+    if (!fs::exists(jsonPath)) {
+        JsonUtils::createDefaultJson(jsonPath);
+    }
+
     if (!DllLoading::launchGame(gameExePath, isOnline)) {
         showMessageBox(QMessageBox::Critical, "Error", "Failed to start the game!");
         progressBar->setVisible(false);

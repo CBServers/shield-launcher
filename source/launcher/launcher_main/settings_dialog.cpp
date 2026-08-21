@@ -328,8 +328,7 @@ void SettingsDialog::loadSettings() {
     treeWidget->clear();
     
     if (!fs::exists(jsonPath)) {
-        showMessageBox(QMessageBox::Critical, "Error", "Could not find project-bo4.json file");
-        return;
+        JsonUtils::createDefaultJson(jsonPath);
     }
     
     FILE* fp = nullptr;
