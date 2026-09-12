@@ -1,6 +1,7 @@
 #include "std_include.hpp"
 #include "launcher_main_window.hpp"
 #include "cli_args.hpp"
+#include "../launcher_funcs/json_utils.hpp"
 
 #include <QCommandLineParser>
 #include <QTextStream>
@@ -54,6 +55,10 @@ static int run(int argc, char** argv) {
         if (!cli::applySetting("demonware", "ipv4", parser.value(ipOpt).toStdString())) {
             return 1;
         }
+    }
+
+    if (auto gameDir = cli::resolveGameDir(); !gameDir.empty()) {
+        JsonUtils::migrateServerIp(gameDir / "project-bo4.json");
     }
 
     if (modeCount == 0) {

@@ -6,7 +6,7 @@ namespace fs = std::filesystem;
 
 namespace cli {
 
-    static fs::path resolveGameDir() {
+    fs::path resolveGameDir() {
         fs::path exeDir = QCoreApplication::applicationDirPath().toStdWString();
         if (fs::exists(exeDir / "BlackOps4.exe")) {
             return exeDir;

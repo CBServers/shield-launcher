@@ -32,7 +32,7 @@ namespace JsonUtils {
         }
 
         rapidjson::Value demonware(rapidjson::kObjectType);
-        demonware.AddMember("ipv4", "70.55.126.7", allocator);  
+        demonware.AddMember("ipv4", rapidjson::StringRef(DEFAULT_SERVER_IP), allocator);
         doc.AddMember("demonware", demonware, allocator);
 
         rapidjson::Value identity(rapidjson::kObjectType);
@@ -124,5 +124,13 @@ namespace JsonUtils {
         fclose(fp);
 
         return true;
+    }
+
+    void migrateServerIp(const fs::path& jsonPath) {
+        if (!fs::exists(jsonPath)) return;
+
+        if (getJsonItem(jsonPath, "demonware", "ipv4") == LEGACY_SERVER_IP) {
+            replaceJsonValue(jsonPath, DEFAULT_SERVER_IP, "demonware", "ipv4");
+        }
     }
 }
