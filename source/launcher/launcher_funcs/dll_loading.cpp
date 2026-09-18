@@ -1,5 +1,6 @@
 #include "std_include.hpp"
 #include "dll_loading.hpp"
+#include "utils.hpp"
 #include <Windows.h>
 #include <TlHelp32.h>
 #include <filesystem>
@@ -92,7 +93,7 @@ namespace DllLoading {
         return found;
     }
 
-    Result extractDlls(const fs::path& gameDir, bool isOnline, bool reshadeEnabled) {
+    Result extractDlls(const fs::path& gameDir, bool isOnline, bool reshadeEnabled, std::error_code& copyError) {
         if (gameDir.empty()) {
             return Result::InvalidGamePath;
         }
@@ -130,34 +131,14 @@ namespace DllLoading {
             return Result::FileNotFound;
         }
 
-        // delete the old support file, to avoid some getting ui errors cause of two zone files
-        fs::path supportFF = gamePath / "zone" / "support.ff";
-        try {
-            if(fs::exists(supportFF)) {
-                std::cout << "Deleting: " << supportFF.string() << std::endl;
-                fs::remove(supportFF);
-            }
-            else
-                std::cout << "Failed to delete support.ff, it does not exists.." << std::endl;
-        }
-        catch(const std::exception& e) {
-            std::cout << "Failed to delete support.ff: " << e.what() << std::endl;
+        fs::path dstDll = gamePath / "XInput9_1_0.dll";
+        if (!utils::copyFileIfChanged(srcDll, dstDll, copyError)) {
+            std::cout << "Copy failed: " << copyError.message() << std::endl;
+            return Result::CopyError;
         }
 
-        fs::path dstDll = gamePath / "XInput9_1_0.dll";
-        try {
-            fs::copy_file(srcDll, dstDll, fs::copy_options::overwrite_existing);
-            std::cout << "Copied DLL to: " << dstDll.string() << std::endl;
-            return Result::Success;
-        }
-        catch (const std::exception& e) {
-            std::cout << "Copy failed: " << e.what() << std::endl;
-            return Result::CopyError;
-        }
-        catch (...) {
-            std::cout << "Unknown exception during copy" << std::endl;
-            return Result::CopyError;
-        }
+        std::cout << "Copied DLL to: " << dstDll.string() << std::endl;
+        return Result::Success;
     }
 
     void cleanupDllsAfterGame() {

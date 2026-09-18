@@ -4,12 +4,26 @@
 #include "settings_dialog.hpp"
 #include "window_utils.hpp"
 #include "utils.hpp"
+#include "cli_args.hpp"
+#include "debugging/serverlog.hpp"
 #include "../launcher_funcs/dll_loading.hpp"
 #include "../launcher_funcs/json_utils.hpp"
 #include "../launcher_funcs/auto_update.hpp"
 #include <mmsystem.h>
 
 namespace fs = std::filesystem;
+
+static QString describeError(const std::error_code& error) {
+    return QString("%1 (error %2)").arg(QString::fromLocal8Bit(error.message()).trimmed(), QString::number(error.value()));
+}
+
+static QString displayPath(const fs::path& path) {
+    return QDir::toNativeSeparators(QString::fromStdWString(path.wstring()));
+}
+
+static QString fileWarning(const QString& what, const fs::path& path, const std::error_code& error) {
+    return QString("%1: %2\n%3").arg(what, displayPath(path), describeError(error));
+}
 
 MainWindow::MainWindow(QWidget* parent, bool cliMode) : QMainWindow(parent),
 launcherDir(QCoreApplication::applicationDirPath().toStdWString()),
@@ -262,7 +276,13 @@ void MainWindow::startGame(bool isOnline, bool isVanilla) {
 
     progressBar->setValue(15);
 
-    copyLPCFolder();
+    const fs::path gameDir = cli::resolveGameDir();
+    QStringList warnings;
+
+    const QStringList lpcWarnings = copyLPCFolder(gameDir);
+    if (!isVanilla) {
+        warnings << lpcWarnings;
+    }
 
     progressBar->setValue(25);
 
@@ -270,7 +290,8 @@ void MainWindow::startGame(bool isOnline, bool isVanilla) {
 
     if (!isVanilla)
     {
-        auto result = DllLoading::extractDlls(currentPath, isOnline, reshadeEnabled);
+        std::error_code copyError;
+        auto result = DllLoading::extractDlls(currentPath, isOnline, reshadeEnabled, copyError);
         if(result != DllLoading::Result::Success) {
             QString errorMsg;
             switch(result) {
@@ -282,11 +303,12 @@ void MainWindow::startGame(bool isOnline, bool isVanilla) {
                 errorMsg = "BlackOps4.exe not found! Make sure the launcher shortcut is in the game directory.";
                 break;
             case DllLoading::Result::CopyError:
-                errorMsg = "Failed to copy the mod DLL into the game directory.";
+                errorMsg = QString("Failed to copy XInput9_1_0.dll into the game directory:\n%1").arg(describeError(copyError));
                 break;
             default:
                 errorMsg = "Unknown error occurred while extracting files.";
             }
+            logger::write(logger::LOG_LEVEL_ERROR, logger::LOG_LABEL_INITIALIZER, "%s", errorMsg.toStdString().c_str());
             showMessageBox(QMessageBox::Critical, "Error", errorMsg);
             progressBar->setVisible(false);
 
@@ -294,6 +316,16 @@ void MainWindow::startGame(bool isOnline, bool isVanilla) {
             onlineButton->setEnabled(true);
             offlineButton->setEnabled(true);
             return;
+        }
+
+        // delete the old support file, to avoid some getting ui errors cause of two zone files
+        if (!gameDir.empty()) {
+            const fs::path supportFF = gameDir / "zone" / "support.ff";
+            std::error_code removeError;
+            fs::remove(supportFF, removeError);
+            if (removeError) {
+                warnings << fileWarning("Old zone file not removed (can cause UI errors)", supportFF, removeError);
+            }
         }
     }
 
@@ -306,11 +338,15 @@ void MainWindow::startGame(bool isOnline, bool isVanilla) {
     {
         game_exe = "Black Ops 4 Launcher.exe";
 
-		// delete our dll if it exist.
-        fs::path xinputPath = currentPath / "XInput9_1_0.dll";
-        if (fs::exists(xinputPath)) {
-            fs::remove(xinputPath);
-		}
+        // delete our dll from the game dir, otherwise the vanilla game still loads it
+        if (!gameDir.empty()) {
+            const fs::path xinputPath = gameDir / "XInput9_1_0.dll";
+            std::error_code removeError;
+            fs::remove(xinputPath, removeError);
+            if (removeError) {
+                warnings << fileWarning("Mod DLL not removed (the vanilla game may still load it)", xinputPath, removeError);
+            }
+        }
     }
 
     fs::path gameExePath;
@@ -334,7 +370,23 @@ void MainWindow::startGame(bool isOnline, bool isVanilla) {
     // the client falls back to 127.0.0.1 when this file is missing
     fs::path jsonPath = gameExePath.parent_path() / "project-bo4.json";
     if (!fs::exists(jsonPath)) {
-        JsonUtils::createDefaultJson(jsonPath);
+        const std::error_code jsonError = JsonUtils::createDefaultJson(jsonPath);
+        if (jsonError && !isVanilla) {
+            warnings << fileWarning("project-bo4.json not created (the client will fall back to 127.0.0.1)", jsonPath, jsonError);
+        }
+    }
+
+    for (const QString& warning : warnings) {
+        logger::write(logger::LOG_LEVEL_WARN, logger::LOG_LABEL_INITIALIZER, "%s", QString(warning).replace('\n', " - ").toStdString().c_str());
+    }
+
+    if (!warnings.isEmpty() && !confirmLaunchWithWarnings(warnings)) {
+        progressBar->setVisible(false);
+
+        vanillaButton->setEnabled(true);
+        onlineButton->setEnabled(true);
+        offlineButton->setEnabled(true);
+        return;
     }
 
     if (!DllLoading::launchGame(gameExePath, isOnline)) {
@@ -712,30 +764,46 @@ void MainWindow::loadVolumeSettings() {
     }
 }
 
-bool MainWindow::copyLPCFolder() {
+QStringList MainWindow::copyLPCFolder(const fs::path& gameDir) {
 
-    fs::path currentPath = QCoreApplication::applicationDirPath().toStdWString();
-    fs::path sourceLPCPath = currentPath / "LPC";
+    // a missing game dir is reported by the launch checks that follow
+    if (gameDir.empty()) {
+        return {};
+    }
+
+    const fs::path sourceLPCPath = gameDir / "project-bo4" / "launcher" / "LPC";
+    const fs::path destLPCPath = gameDir / "LPC";
 
     if (!fs::exists(sourceLPCPath)) {
-        return false;
+        return { QString("LPC folder not found: %1").arg(displayPath(sourceLPCPath)) };
     }
 
-    fs::path gameDir;
-    if (fs::exists(currentPath / "BlackOps4.exe")) {
-        gameDir = currentPath;
+    QStringList warnings;
+    for (const auto& failure : utils::syncDirectory(sourceLPCPath, destLPCPath)) {
+        warnings << fileWarning("LPC copy failed", failure.path, failure.error);
     }
-    else if (fs::exists(currentPath.parent_path().parent_path() / "BlackOps4.exe")) {
-        gameDir = currentPath.parent_path().parent_path();
+    return warnings;
+}
+
+bool MainWindow::confirmLaunchWithWarnings(const QStringList& warnings) {
+
+    QMessageBox msgBox(this);
+    msgBox.setIcon(QMessageBox::Warning);
+    msgBox.setWindowTitle("Launch Warning");
+    msgBox.setText("Some files in the game folder could not be updated, so the game may not work correctly.");
+
+    if (warnings.size() > 1) {
+        msgBox.setInformativeText(QString("%1\n\n...and %2 more (see details).").arg(warnings.first(), QString::number(warnings.size() - 1)));
+        msgBox.setDetailedText(warnings.join("\n\n"));
     }
     else {
-        return false;
+        msgBox.setInformativeText(warnings.first());
     }
 
-    if (gameDir.lexically_normal() == currentPath.lexically_normal()) {
-        return true;
-    }
+    QPushButton* launchButton = msgBox.addButton("Launch Anyway", QMessageBox::AcceptRole);
+    msgBox.addButton(QMessageBox::Cancel);
+    msgBox.setDefaultButton(QMessageBox::Cancel);
+    msgBox.exec();
 
-    fs::path destLPCPath = gameDir / "LPC";
-    return utils::copyDirectoryRecursive(sourceLPCPath, destLPCPath);
+    return msgBox.clickedButton() == launchButton;
 }

@@ -42,6 +42,13 @@ namespace logger
         return LogLabelNames[lbl];
     }
 
+    static std::filesystem::path get_log_path()
+    {
+        wchar_t exe_path[MAX_PATH] = { 0 };
+        GetModuleFileNameW(nullptr, exe_path, MAX_PATH);
+        return std::filesystem::path(exe_path).parent_path() / "shield_launcher.log";
+    }
+
     void write(const char* file, std::string str)
     {
         std::ofstream stream;
@@ -119,7 +126,8 @@ namespace logger
         OutputDebugStringA(stream.str().c_str());
 #endif // OUTPUT_DEBUG_API
 
-        write("shield_launcher.log", stream.str());
+        std::ofstream log_file(get_log_path(), std::ios_base::app);
+        log_file << stream.str() << std::endl;
     }
 
     void log_packet_buffer(const char* stub, const char* buffer, size_t length)

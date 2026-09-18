@@ -1,6 +1,8 @@
 #include "utils.hpp"
 #include <algorithm>
 #include <cstdio>
+#include <cstring>
+#include <fstream>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -126,41 +128,83 @@ namespace utils {
 #endif
     }
 
-    bool copyDirectoryRecursive(const std::filesystem::path& sourceDir, const std::filesystem::path& destDir, bool overwrite) {
+    static bool filesMatch(const std::filesystem::path& a, const std::filesystem::path& b) {
+        std::error_code ec;
+        const auto sizeA = std::filesystem::file_size(a, ec);
+        if (ec) {
+            return false;
+        }
+        const auto sizeB = std::filesystem::file_size(b, ec);
+        if (ec || sizeA != sizeB) {
+            return false;
+        }
+
+        std::ifstream streamA(a, std::ios::binary);
+        std::ifstream streamB(b, std::ios::binary);
+        if (!streamA || !streamB) {
+            return false;
+        }
+
+        std::vector<char> bufA(1 << 16);
+        std::vector<char> bufB(1 << 16);
+        while (streamA && streamB) {
+            streamA.read(bufA.data(), bufA.size());
+            streamB.read(bufB.data(), bufB.size());
+            if (streamA.gcount() != streamB.gcount() ||
+                std::memcmp(bufA.data(), bufB.data(), static_cast<size_t>(streamA.gcount())) != 0) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    bool copyFileIfChanged(const std::filesystem::path& source, const std::filesystem::path& dest, std::error_code& error) {
         namespace fs = std::filesystem;
 
-        try {
-            if (!fs::exists(destDir)) {
-                if (!fs::create_directories(destDir)) {
-                    return false;
-                }
-            }
+        error.clear();
+        if (filesMatch(source, dest)) {
+            return true;
+        }
 
+        // a read-only destination makes the overwrite fail with access denied
+        fs::permissions(dest, fs::perms::owner_write, fs::perm_options::add, error);
+
+        error.clear();
+        return fs::copy_file(source, dest, fs::copy_options::overwrite_existing, error);
+    }
+
+    std::vector<CopyFailure> syncDirectory(const std::filesystem::path& sourceDir, const std::filesystem::path& destDir) {
+        namespace fs = std::filesystem;
+
+        std::vector<CopyFailure> failures;
+        std::error_code ec;
+
+        fs::create_directories(destDir, ec);
+        if (ec) {
+            failures.push_back({ destDir, ec });
+            return failures;
+        }
+
+        try {
             for (const auto& entry : fs::directory_iterator(sourceDir)) {
                 const fs::path sourcePath = entry.path();
                 const fs::path destPath = destDir / sourcePath.filename();
 
-                if (fs::is_directory(sourcePath)) {
-                    if (!copyDirectoryRecursive(sourcePath, destPath, overwrite)) {
-                        return false;
-                    }
-                } else if (fs::is_regular_file(sourcePath)) {
-                    if (fs::exists(destPath)) {
-                        if (overwrite) {
-                            fs::remove(destPath);
-                        } else {
-                            continue; 
-                        }
-                    }
-                    
-                    fs::copy_file(sourcePath, destPath, fs::copy_options::overwrite_existing);
+                if (entry.is_directory()) {
+                    auto nested = syncDirectory(sourcePath, destPath);
+                    failures.insert(failures.end(), nested.begin(), nested.end());
+                    continue;
+                }
+
+                if (entry.is_regular_file() && !copyFileIfChanged(sourcePath, destPath, ec)) {
+                    failures.push_back({ destPath, ec });
                 }
             }
-            
-            return true;
-        } catch (const std::exception& e) {
-            return false;
+        } catch (const fs::filesystem_error& e) {
+            failures.push_back({ e.path1(), e.code() });
         }
+
+        return failures;
     }
 
 }

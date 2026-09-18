@@ -14,9 +14,20 @@
 namespace fs = std::filesystem;
 
 namespace JsonUtils {
-    void createDefaultJson(const fs::path& jsonPath) {
-        if (!fs::exists(jsonPath.parent_path())) {
-            fs::create_directories(jsonPath.parent_path());
+    // the CRT keeps the underlying Windows error in _doserrno, which matches the other launcher errors
+    static std::error_code lastCrtError(int crtError) {
+        unsigned long osError = 0;
+        if (_get_doserrno(&osError) == 0 && osError != 0) {
+            return std::error_code(static_cast<int>(osError), std::system_category());
+        }
+        return std::error_code(crtError, std::generic_category());
+    }
+
+    std::error_code createDefaultJson(const fs::path& jsonPath) {
+        std::error_code error;
+        fs::create_directories(jsonPath.parent_path(), error);
+        if (error) {
+            return error;
         }
 
         rapidjson::Document doc;
@@ -39,15 +50,22 @@ namespace JsonUtils {
         identity.AddMember("name", rapidjson::StringRef(username), allocator);
         doc.AddMember("identity", identity, allocator);
 
+        _set_doserrno(0);
         FILE* fp = nullptr;
-        _wfopen_s(&fp, jsonPath.c_str(), L"wb");
-        if (fp) {
-            char writeBuffer[65536];
-            rapidjson::FileWriteStream os(fp, writeBuffer, sizeof(writeBuffer));
-            rapidjson::PrettyWriter<rapidjson::FileWriteStream> writer(os);
-            doc.Accept(writer);
-            fclose(fp);
+        if (const errno_t openError = _wfopen_s(&fp, jsonPath.c_str(), L"wb"); openError != 0) {
+            return lastCrtError(openError);
         }
+
+        char writeBuffer[65536];
+        rapidjson::FileWriteStream os(fp, writeBuffer, sizeof(writeBuffer));
+        rapidjson::PrettyWriter<rapidjson::FileWriteStream> writer(os);
+        doc.Accept(writer);
+
+        const bool writeFailed = ferror(fp) != 0;
+        if (fclose(fp) != 0 || writeFailed) {
+            return lastCrtError(errno);
+        }
+        return {};
     }
 
     std::string getJsonItem(const fs::path& jsonPath, const std::string& spot, const std::string& name) {

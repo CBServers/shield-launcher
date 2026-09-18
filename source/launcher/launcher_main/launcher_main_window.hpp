@@ -27,7 +27,8 @@ private slots:
 private:
 
     void showMessageBox(QMessageBox::Icon icon, const QString& title, const QString& text);
-    bool copyLPCFolder();
+    QStringList copyLPCFolder(const std::filesystem::path& gameDir);
+    bool confirmLaunchWithWarnings(const QStringList& warnings);
     void playStartupSound();
     void saveCloseLauncheronPlay();
     void loadCloseLauncheronPlay();
