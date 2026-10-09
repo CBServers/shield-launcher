@@ -106,7 +106,7 @@ def get_json_item(json_path, spot, name):
             data = {
                 "demonware":
                 {
-                    "ipv4": "70.55.125.113" #WIZE server
+                    "ipv4": "70.55.125.26" #WIZE server
                 },
                 "identity":
                 {

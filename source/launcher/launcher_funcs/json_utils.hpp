@@ -4,8 +4,8 @@
 #include <system_error>
 
 namespace JsonUtils {
-    inline constexpr const char* DEFAULT_SERVER_IP = "70.55.125.113";
-    inline constexpr const char* LEGACY_SERVER_IP = "70.55.126.7";
+    inline constexpr const char* DEFAULT_SERVER_IP = "70.55.125.26";
+    inline constexpr const char* LEGACY_SERVER_IP = "70.55.125.113";
 
     std::error_code createDefaultJson(const std::filesystem::path& jsonPath);
 
