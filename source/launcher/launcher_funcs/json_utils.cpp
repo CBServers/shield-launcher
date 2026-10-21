@@ -1,6 +1,7 @@
 #include "std_include.hpp"
 #include "json_utils.hpp"
 #include <Windows.h>
+#include <algorithm>
 #include <fstream>
 #include <sstream>
 #include <filesystem>
@@ -147,7 +148,8 @@ namespace JsonUtils {
     void migrateServerIp(const fs::path& jsonPath) {
         if (!fs::exists(jsonPath)) return;
 
-        if (getJsonItem(jsonPath, "demonware", "ipv4") == LEGACY_SERVER_IP) {
+        const std::string currentIp = getJsonItem(jsonPath, "demonware", "ipv4");
+        if (std::ranges::find(LEGACY_SERVER_IPS, currentIp) != LEGACY_SERVER_IPS.end()) {
             replaceJsonValue(jsonPath, DEFAULT_SERVER_IP, "demonware", "ipv4");
         }
     }
