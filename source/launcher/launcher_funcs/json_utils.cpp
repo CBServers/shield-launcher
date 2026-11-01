@@ -1,7 +1,6 @@
 #include "std_include.hpp"
 #include "json_utils.hpp"
 #include <Windows.h>
-#include <algorithm>
 #include <fstream>
 #include <sstream>
 #include <filesystem>
@@ -44,7 +43,7 @@ namespace JsonUtils {
         }
 
         rapidjson::Value demonware(rapidjson::kObjectType);
-        demonware.AddMember("ipv4", rapidjson::StringRef(DEFAULT_SERVER_IP), allocator);
+        demonware.AddMember("ipv4", "78.157.42.107", allocator);
         doc.AddMember("demonware", demonware, allocator);
 
         rapidjson::Value identity(rapidjson::kObjectType);
@@ -143,14 +142,5 @@ namespace JsonUtils {
         fclose(fp);
 
         return true;
-    }
-
-    void migrateServerIp(const fs::path& jsonPath) {
-        if (!fs::exists(jsonPath)) return;
-
-        const std::string currentIp = getJsonItem(jsonPath, "demonware", "ipv4");
-        if (std::ranges::find(LEGACY_SERVER_IPS, currentIp) != LEGACY_SERVER_IPS.end()) {
-            replaceJsonValue(jsonPath, DEFAULT_SERVER_IP, "demonware", "ipv4");
-        }
     }
 }

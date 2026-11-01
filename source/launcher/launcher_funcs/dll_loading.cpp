@@ -6,11 +6,21 @@
 #include <filesystem>
 #include <fstream>
 #include <zlib.h>
-#include <QCoreApplication>
 #include <thread>
 #include <atomic>
 
 namespace fs = std::filesystem;
+
+namespace {
+    // .string() throws on names the system code page can't hold, so logged paths go out as utf-8
+    std::string logPath(const fs::path& path) {
+        const std::wstring& wide = path.native();
+        int size = WideCharToMultiByte(CP_UTF8, 0, wide.data(), static_cast<int>(wide.size()), nullptr, 0, nullptr, nullptr);
+        std::string narrow(size, '\0');
+        WideCharToMultiByte(CP_UTF8, 0, wide.data(), static_cast<int>(wide.size()), narrow.data(), size, nullptr, nullptr);
+        return narrow;
+    }
+}
 
 namespace DllLoading {
     std::thread cleanupThread;
@@ -47,7 +57,7 @@ namespace DllLoading {
         try {
             if (fs::exists(dllPath)) {
                 fs::remove(dllPath);
-                std::cout << "Successfully deleted: " << dllPath.string() << std::endl;
+                std::cout << "Successfully deleted: " << logPath(dllPath) << std::endl;
             }
         } catch (const std::exception& e) {
             std::cout << "Error deleting DLLs: " << e.what() << std::endl;
@@ -93,38 +103,16 @@ namespace DllLoading {
         return found;
     }
 
-    Result extractDlls(const fs::path& gameDir, bool isOnline, bool reshadeEnabled, std::error_code& copyError) {
-        if (gameDir.empty()) {
+    Result copyClientDll(const fs::path& gameDir, std::error_code& copyError) {
+        if (gameDir.empty() || !fs::exists(gameDir / "BlackOps4.exe")) {
             return Result::InvalidGamePath;
         }
 
         fs::path gamePath = gameDir;
-        fs::path gameExePath = gamePath / "BlackOps4.exe";
-        
-        std::cout << "Initial game path: " << gamePath.string() << std::endl;
-        std::cout << "Looking for game exe at: " << gameExePath.string() << std::endl;
-        
-        if (!fs::exists(gameExePath)) {
-            fs::path parentPath = gamePath.parent_path().parent_path();
-            gameExePath = parentPath / "BlackOps4.exe";
-            
-            std::cout << "Trying parent path: " << parentPath.string() << std::endl;
-            std::cout << "Looking for game exe at: " << gameExePath.string() << std::endl;
-            
-            if (!fs::exists(gameExePath)) {
-                std::cout << "Game exe not found at parent path either" << std::endl;
-                return Result::InvalidGamePath;
-            }
-            
-            gamePath = parentPath;
-            std::cout << "Updated game path to: " << gamePath.string() << std::endl;
-        }
 
-        fs::path launcherDir = gamePath / "project-bo4" / "launcher";
-        std::cout << "Launcher directory: " << launcherDir.string() << std::endl;
-        
-        fs::path srcDll = launcherDir / (isOnline ? "mp" : "solo") / "XInput9_1_0.dll";
-        std::cout << "Looking for source DLL at: " << srcDll.string() << std::endl;
+        // read from the release layout even when the launcher sits in the game root, where our copy would be the target
+        fs::path srcDll = gamePath / "project-bo4" / "launcher" / "XInput9_1_0.dll";
+        std::cout << "Looking for client dll at: " << logPath(srcDll) << std::endl;
 
         if (!fs::exists(srcDll)) {
             std::cout << "Source DLL not found" << std::endl;
@@ -137,14 +125,14 @@ namespace DllLoading {
             return Result::CopyError;
         }
 
-        std::cout << "Copied DLL to: " << dstDll.string() << std::endl;
+        std::cout << "Copied DLL to: " << logPath(dstDll) << std::endl;
         return Result::Success;
     }
 
     void cleanupDllsAfterGame() {
         cleanupThreadRunning = true;
         std::cout << "Starting DLL cleanup monitor thread..." << std::endl;
-        std::cout << "Will clean up DLLs in directory: " << gameDirectoryForCleanup.string() << std::endl;
+        std::cout << "Will clean up DLLs in directory: " << logPath(gameDirectoryForCleanup) << std::endl;
         
         while (isGameRunning()) {
             std::this_thread::sleep_for(std::chrono::seconds(2));
@@ -162,11 +150,11 @@ namespace DllLoading {
         
         fs::path dllPath = gameDirectoryForCleanup / "XInput9_1_0.dll";
         
-        std::cout << "Attempting to delete DLL at: " << dllPath.string() << std::endl;
+        std::cout << "Attempting to delete DLL at: " << logPath(dllPath) << std::endl;
         
         try {
             if (fs::exists(dllPath)) {
-                std::cout << "DLL found, deleting: " << dllPath.string() << std::endl;
+                std::cout << "DLL found, deleting: " << logPath(dllPath) << std::endl;
                 
                 for (int i = 0; i < 5; i++) {
                     try {
@@ -183,7 +171,7 @@ namespace DllLoading {
                     }
                 }
             } else {
-                std::cout << "DLL not found at: " << dllPath.string() << std::endl;
+                std::cout << "DLL not found at: " << logPath(dllPath) << std::endl;
             }
         } catch (const std::exception& e) {
             std::cout << "Error accessing DLL path: " << e.what() << std::endl;
@@ -192,8 +180,8 @@ namespace DllLoading {
         cleanupThreadRunning = false;
     }
 
-    bool launchGame(const fs::path& gameExePath, bool isOnline) {
-        std::cout << "Launching game: " << gameExePath.string() << (isOnline ? " -multiplayer" : " -zombies") << std::endl;
+    bool launchGame(const fs::path& gameExePath, const std::wstring& gameFlags) {
+        std::cout << "Launching game: " << logPath(gameExePath) << std::endl;
 
         fs::path gameDir = gameExePath.parent_path();
 
@@ -201,7 +189,6 @@ namespace DllLoading {
 
         std::wstring exeStr = gameExePath.wstring();
         std::wstring dirStr = gameDir.wstring();
-        std::wstring gameFlags = isOnline ? L" -multiplayer" : L" -zombies";
 
         SHELLEXECUTEINFOW shExInfo = {0};
         shExInfo.cbSize = sizeof(SHELLEXECUTEINFOW);
@@ -213,7 +200,7 @@ namespace DllLoading {
         shExInfo.lpDirectory = dirStr.c_str();
         shExInfo.nShow = SW_SHOW;
 
-        std::cout << "Launching from directory: " << gameDir.string() << std::endl;
+        std::cout << "Launching from directory: " << logPath(gameDir) << std::endl;
 
         if (!ShellExecuteExW(&shExInfo)) {
             DWORD error = GetLastError();

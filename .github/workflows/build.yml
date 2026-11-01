@@ -41,6 +41,9 @@ jobs:
       - name: Generate project files
         run: ./generate.bat
 
+      - name: Restore NuGet packages
+        run: msbuild /t:restore /p:RestorePackagesConfig=true build/Shield_launcher.slnx
+
       - name: Set up problem matching
         uses: ammaraskar/msvc-problem-matcher@master
 

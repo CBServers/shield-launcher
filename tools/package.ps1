@@ -33,46 +33,11 @@ function Copy-Required {
     Write-Host "  copied $Name"
 }
 
-# Launcher binaries + Qt runtime DLLs
-$launcherFiles = @(
-    'Shield_Launcher.exe',
-    'Qt6Core.dll',
-    'Qt6Gui.dll',
-    'Qt6Network.dll',
-    'Qt6Widgets.dll'
-)
-foreach ($f in $launcherFiles) {
-    Copy-Required -Name $f -DstDir $dstLauncher
-}
-
-# Qt platform plugin folder (replace wholesale)
-$srcPlatforms = Join-Path $srcDir 'platforms'
-$dstPlatforms = Join-Path $dstLauncher 'platforms'
-if (-not (Test-Path -LiteralPath $srcPlatforms)) {
-    throw "Missing required build output: $srcPlatforms"
-}
-if (Test-Path -LiteralPath $dstPlatforms) {
-    Remove-Item -LiteralPath $dstPlatforms -Recurse -Force
-}
-Copy-Item -LiteralPath $srcPlatforms -Destination $dstPlatforms -Recurse -Force
-Write-Host "  copied platforms/"
+# Launcher binary (the UI is built into it and the WebView2 loader is linked statically)
+Copy-Required -Name 'Shield_Launcher.exe' -DstDir $dstLauncher
 
 # Top-level shortcut
 Copy-Required -Name 'Launch Project BO4.exe' -DstDir $dstRoot
-
-# Migrate legacy mp.zip/solo.zip into mp/ and solo/ folders so the launcher can copy the DLL directly
-foreach ($mode in 'mp','solo') {
-    $zip    = Join-Path $dstLauncher "$mode.zip"
-    $target = Join-Path $dstLauncher $mode
-    if (Test-Path -LiteralPath $zip) {
-        if (-not (Test-Path -LiteralPath $target)) {
-            New-Item -ItemType Directory -Path $target | Out-Null
-        }
-        Expand-Archive -LiteralPath $zip -DestinationPath $target -Force
-        Remove-Item -LiteralPath $zip -Force
-        Write-Host "  migrated $mode.zip -> $mode/"
-    }
-}
 
 # Strip any stale update zips at the release root so the artifact is clean
 $staleZips = Get-ChildItem -LiteralPath $dstRoot -Filter '*.zip' -File -ErrorAction SilentlyContinue

@@ -13,7 +13,9 @@ namespace DllLoading {
 
     bool isGameRunning();
 
-    Result extractDlls(const std::filesystem::path& gameDir, bool isOnline, bool reshadeEnabled, std::error_code& copyError);
+    // copies project-bo4/launcher/XInput9_1_0.dll into the game dir
+    Result copyClientDll(const std::filesystem::path& gameDir, std::error_code& copyError);
 
-    bool launchGame(const std::filesystem::path& gameExePath, bool isOnline);
+    // flags start with a space, " -dedicated"
+    bool launchGame(const std::filesystem::path& gameExePath, const std::wstring& gameFlags = L" -zombies");
 }

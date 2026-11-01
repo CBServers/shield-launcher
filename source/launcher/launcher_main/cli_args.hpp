@@ -1,11 +1,14 @@
 #pragma once
 
 #include <string>
-#include <filesystem>
+#include <vector>
+#include <optional>
+#include <Windows.h>
 
 namespace cli {
-    std::filesystem::path resolveGameDir();
+    // applies -name/-ip and runs an -online/-offline/-vanilla launch, an exit code means the window should not open
+    std::optional<int> run();
 
-    bool applySetting(const std::string& section, const std::string& key,
-                      const std::string& value);
+    // the window's launches ask through this too
+    bool confirmLaunchWithWarnings(HWND owner, const std::vector<std::string>& warnings);
 }
