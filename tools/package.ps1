@@ -2,7 +2,8 @@
 param(
     [string]$Configuration = 'Release',
     [string]$BuildDir = 'build/bin/x64',
-    [string]$ReleaseDir = 'project-bo4/Latest-Release-Files'
+    [string]$ReleaseDir = 'project-bo4/Latest-Release-Files',
+    [string]$ZipPath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -47,3 +48,34 @@ foreach ($z in $staleZips) {
 }
 
 Write-Host "Package complete: $dstRoot"
+
+if (-not $ZipPath) { return }
+
+# The files this fork owns; the CB updater adds the game content from upstream's content release
+$owned = @(
+    'Launch Project BO4.exe',
+    'project-bo4/launcher/Shield_Launcher.exe',
+    'project-bo4/launcher/images',
+    'project-bo4/launcher/Sounds'
+)
+
+Add-Type -AssemblyName System.IO.Compression, System.IO.Compression.FileSystem
+$zipFull = [System.IO.Path]::GetFullPath($ZipPath)
+if (Test-Path -LiteralPath $zipFull) { Remove-Item -LiteralPath $zipFull -Force }
+$zip = [System.IO.Compression.ZipFile]::Open($zipFull, [System.IO.Compression.ZipArchiveMode]::Create)
+try {
+    foreach ($item in $owned) {
+        $full = Join-Path $dstRoot $item
+        if (-not (Test-Path -LiteralPath $full)) { throw "Missing release file: $full" }
+        $files = if (Test-Path -LiteralPath $full -PathType Container) { Get-ChildItem -LiteralPath $full -File -Recurse } else { Get-Item -LiteralPath $full }
+        foreach ($file in $files) {
+            $entry = [System.IO.Path]::GetRelativePath($dstRoot, $file.FullName) -replace '\\', '/'
+            [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $file.FullName, $entry, [System.IO.Compression.CompressionLevel]::Optimal)
+            Write-Host "  zipped $entry"
+        }
+    }
+}
+finally {
+    $zip.Dispose()
+}
+Write-Host "Launcher zip: $zipFull"
