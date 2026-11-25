@@ -17,6 +17,8 @@ jobs:
   build:
     name: Build
     runs-on: windows-2025-vs2026
+    permissions:
+      contents: write
     strategy:
       fail-fast: false
       matrix:
@@ -52,74 +54,23 @@ jobs:
 
       - name: Package release tree
         if: matrix.configuration == 'Release'
-        run: pwsh -NoProfile -ExecutionPolicy Bypass -File tools/package.ps1 -Configuration ${{matrix.configuration}}
+        run: pwsh -NoProfile -ExecutionPolicy Bypass -File tools/package.ps1 -Configuration ${{matrix.configuration}} -ZipPath project-bo4-launcher.zip
 
-      - name: Upload Release Package
+      # The CB updater's upstream-updates workflow picks this release up and opens a PR with it plus upstream's game content
+      - name: Publish launcher release
         if: matrix.configuration == 'Release' && github.repository_owner == 'CBServers' && github.event_name == 'push' && github.ref == 'refs/heads/main'
-        uses: actions/upload-artifact@v4.4.0
-        with:
-          name: Release Package
-          path: project-bo4/Latest-Release-Files/
-
-  deploy:
-    name: Deploy artifacts
-    needs: build
-    runs-on: windows-2022
-    if: github.repository_owner == 'CBServers' && github.event_name == 'push' && github.ref == 'refs/heads/main'
-    steps:
-      - name: Set Git to use LF line endings
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          git config --global core.autocrlf false
-          git config --global core.eol lf
+          $version = (Select-String -Path source/launcher/version.hpp -Pattern 'LAUNCHER_VERSION "([^"]+)"').Matches[0].Groups[1].Value
+          $tag = "v$version-cb.${{ github.run_number }}"
+          $sha = "${{ github.sha }}"
+          gh release create $tag project-bo4-launcher.zip --target $sha --title "Launcher $version (CB build ${{ github.run_number }})" --notes "Built from $sha." --latest
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
 
-      - name: Download Release Package
-        uses: actions/download-artifact@v4.1.8
-        with:
-          name: Release Package
-          path: release
-
-      - name: Clone updater
-        run: |
-          git lfs install
-          git config --global user.name 'CBServers'
-          git config --global user.email '${{ secrets.OWNER_EMAIL }}'
-          $env:GIT_TERMINAL_PROMPT=0
-          $env:GIT_USERNAME="CBServers"
-          $env:GIT_PASSWORD="${{ secrets.REPO_PAT }}"
-          git clone https://$env:GIT_USERNAME:$env:GIT_PASSWORD@github.com/CBServers/updater.git
-
-      - name: Replace project-bo4 folder in updater
-        run: |
-          $artifactDir = ".\updater\updater\project-bo4"
-          # Large files stored only in the updater repo (LFS) - never shipped in the artifact
-          $keep = @('BlackOps4.exe')
-          if (Test-Path $artifactDir) {
-            Get-ChildItem -LiteralPath $artifactDir -Force |
-              Where-Object { $keep -notcontains $_.Name } |
-              ForEach-Object { Remove-Item -LiteralPath $_.FullName -Recurse -Force }
-          } else {
-            New-Item -ItemType Directory -Path $artifactDir | Out-Null
-          }
-          Copy-Item -Path .\release\* -Destination $artifactDir -Recurse -Force
-
-      - name: Download hashing executable
-        run: |
-          Invoke-WebRequest -Uri "https://github.com/CBServers/updater/releases/latest/download/update-hasher.exe" -OutFile "update-hasher.exe"
-
-      - name: Generate hashed.json
-        run: |
-          $artifactDir = ".\updater\updater\project-bo4"
-          Move-Item -Path .\update-hasher.exe -Destination "$artifactDir\update-hasher.exe"
-          Set-Location $artifactDir
-          .\update-hasher.exe
-          Set-Location $env:GITHUB_WORKSPACE
-          Move-Item -Path "$artifactDir\hashed.json" -Destination ".\updater\updater\project-bo4.json" -Force
-          Remove-Item -Path "$artifactDir\update-hasher.exe" -Force
-
-      - name: Push changes to updater
-        run: |
-          cd updater
-          git add .
-          git lfs status
-          git commit -m "Update artifacts"
-          git push origin main
+      - name: Ask the updater to check for it
+        if: matrix.configuration == 'Release' && github.repository_owner == 'CBServers' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.REPO_PAT }}
+        run: gh workflow run upstream-updates.yml -R CBServers/updater -f client=project-bo4
